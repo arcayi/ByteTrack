@@ -27,14 +27,14 @@ def make_parser():
         "-i",
         "--video_path",
         type=str,
-        default='../../videos/palace.mp4',
+        default="../../videos/palace.mp4",
         help="Path to your input image.",
     )
     parser.add_argument(
         "-o",
         "--output_dir",
         type=str,
-        default='demo_output',
+        default="demo_output",
         help="Path to your output directory.",
     )
     parser.add_argument(
@@ -66,7 +66,7 @@ def make_parser():
     parser.add_argument("--track_thresh", type=float, default=0.5, help="tracking confidence threshold")
     parser.add_argument("--track_buffer", type=int, default=30, help="the frames for keep lost tracks")
     parser.add_argument("--match_thresh", type=float, default=0.8, help="matching threshold for tracking")
-    parser.add_argument('--min-box-area', type=float, default=10, help='filter out tiny boxes')
+    parser.add_argument("--min-box-area", type=float, default=10, help="filter out tiny boxes")
     parser.add_argument("--mot20", dest="mot20", default=False, action="store_true", help="test mot20.")
     return parser
 
@@ -76,8 +76,10 @@ class Predictor(object):
         self.rgb_means = (0.485, 0.456, 0.406)
         self.std = (0.229, 0.224, 0.225)
         self.args = args
-        self.session = onnxruntime.InferenceSession(args.model)
-        self.input_shape = tuple(map(int, args.input_shape.split(',')))
+        self.session = onnxruntime.InferenceSession(
+            args.model, providers=["TensorrtExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]
+        )
+        self.input_shape = tuple(map(int, args.input_shape.split(",")))
 
     def inference(self, ori_img, timer):
         img_info = {"id": 0}
@@ -97,10 +99,10 @@ class Predictor(object):
         scores = predictions[:, 4:5] * predictions[:, 5:]
 
         boxes_xyxy = np.ones_like(boxes)
-        boxes_xyxy[:, 0] = boxes[:, 0] - boxes[:, 2]/2.
-        boxes_xyxy[:, 1] = boxes[:, 1] - boxes[:, 3]/2.
-        boxes_xyxy[:, 2] = boxes[:, 0] + boxes[:, 2]/2.
-        boxes_xyxy[:, 3] = boxes[:, 1] + boxes[:, 3]/2.
+        boxes_xyxy[:, 0] = boxes[:, 0] - boxes[:, 2] / 2.0
+        boxes_xyxy[:, 1] = boxes[:, 1] - boxes[:, 3] / 2.0
+        boxes_xyxy[:, 2] = boxes[:, 0] + boxes[:, 2] / 2.0
+        boxes_xyxy[:, 3] = boxes[:, 1] + boxes[:, 3] / 2.0
         boxes_xyxy /= ratio
         dets = multiclass_nms(boxes_xyxy, scores, nms_thr=self.args.nms_thr, score_thr=self.args.score_thr)
         return dets[:, :-1], img_info
@@ -115,20 +117,20 @@ def imageflow_demo(predictor, args):
     os.makedirs(save_folder, exist_ok=True)
     save_path = os.path.join(save_folder, args.video_path.split("/")[-1])
     logger.info(f"video save_path is {save_path}")
-    vid_writer = cv2.VideoWriter(
-        save_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (int(width), int(height))
-    )
+    vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (int(width), int(height)))
     tracker = BYTETracker(args, frame_rate=30)
     timer = Timer()
     frame_id = 0
     results = []
     while True:
         if frame_id % 20 == 0:
-            logger.info('Processing frame {} ({:.2f} fps)'.format(frame_id, 1. / max(1e-5, timer.average_time)))
+            logger.info("Processing frame {} ({:.2f} fps)".format(frame_id, 1.0 / max(1e-5, timer.average_time)))
         ret_val, frame = cap.read()
         if ret_val:
             outputs, img_info = predictor.inference(frame, timer)
-            online_targets = tracker.update(outputs, [img_info['height'], img_info['width']], [img_info['height'], img_info['width']])
+            online_targets = tracker.update(
+                outputs, [img_info["height"], img_info["width"]], [img_info["height"], img_info["width"]]
+            )
             online_tlwhs = []
             online_ids = []
             online_scores = []
@@ -142,8 +144,9 @@ def imageflow_demo(predictor, args):
                     online_scores.append(t.score)
             timer.toc()
             results.append((frame_id + 1, online_tlwhs, online_ids, online_scores))
-            online_im = plot_tracking(img_info['raw_img'], online_tlwhs, online_ids, frame_id=frame_id + 1,
-                                      fps=1. / timer.average_time)
+            online_im = plot_tracking(
+                img_info["raw_img"], online_tlwhs, online_ids, frame_id=frame_id + 1, fps=1.0 / timer.average_time
+            )
             vid_writer.write(online_im)
             ch = cv2.waitKey(1)
             if ch == 27 or ch == ord("q") or ch == ord("Q"):
@@ -153,7 +156,7 @@ def imageflow_demo(predictor, args):
         frame_id += 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = make_parser().parse_args()
 
     predictor = Predictor(args)
